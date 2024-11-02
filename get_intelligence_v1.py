@@ -13,8 +13,8 @@ import re
 import base64
 
 # API keys and endpoints
-API_VT_KEY = '7f268c7b079195b08862e0b58aec8d040da3820bdd787a78f42ab63a2be89b90'  # VirusTotal API key
-API_AV_KEY = '63ae7b7730e499194ac41e24f1d70bd41ea4dd4229d0d2d6647eb866fc3c575c'  # AlienVault OTX API key
+API_VT_KEY = '<put-your-api-key>'  # VirusTotal API key
+API_AV_KEY = '<put-your-api-key>'  # AlienVault OTX API key
 VT_URL = 'https://www.virustotal.com/api/v3/'
 OTX_SERVER = 'https://otx.alienvault.com/'
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 Edg/123.0.0.0"
