@@ -1,75 +1,62 @@
-# Malicious Checker
+# ThreatScanner
 
-A Python script that checks for malicious indicators using VirusTotal, AlienVault OTX, and ThreatFox. This tool allows you to scan IPs, domains, URLs, file hashes, and even whole files containing multiple IPs or hostnames.
+**ThreatScanner** is a Python-based tool designed to quickly scan and analyze threat indicators (IPs, domains, URLs, files, and hashes) using multiple intelligence sources like **VirusTotal**, **AlienVault OTX**, and **ThreatFox**. This script helps identify potential threats and gather detailed information on them.
 
 ## Features
 
-- **VirusTotal**: Check IPs, domains, URLs, or file hashes.
-- **AlienVault OTX**: Query malicious indicators by IP, domain, URL, or file hash.
-- **ThreatFox**: Search for indicators of compromise (IOCs) on ThreatFox.
-- **Multithreaded Processing**: Supports multiple simultaneous queries for faster results.
+- Query analysis of IPs, hostnames, URLs, files, and hashes.
+- Integration with VirusTotal, AlienVault OTX, and ThreatFox APIs.
+- Concurrent execution to enhance performance when analyzing multiple items.
+- Supports batch analysis from text files.
 
 ## Requirements
 
 - Python 3.6+
-- Required libraries: `requests`, `argparse`, `OTXv2`, `concurrent.futures`, `urllib3`
+- Python libraries specified in `requirements.txt`
 
-Install dependencies with:
-```bash
-pip install requests OTXv2 urllib3
-```
+## Installation
 
-## Setup
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/ThreatScanner.git
+   cd ThreatScanner
+   ```
 
-1. Clone this repository:
-    ```bash
-    git clone https://github.com/yourusername/malicious-checker.git
-    cd malicious-checker
-    ```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-2. Insert your API keys for VirusTotal and AlienVault OTX in the script:
-    ```python
-    API_VT_KEY = '<put-your-api-key>'  # VirusTotal API key
-    API_AV_KEY = '<put-your-api-key>'  # AlienVault OTX API key
-    ```
+3. Set up API keys in the code:
+   - Open the main script and replace `<put-your-api-key>` with your own **VirusTotal** and **AlienVault OTX** API keys.
 
 ## Usage
 
-Run the script with the following arguments:
+Run the script with the necessary arguments to specify the type of analysis and the intelligence engines.
 
 ```bash
-python3 malicious_checker.py --engine <engines> [options]
+python ThreatScanner.py [options]
 ```
 
-### Arguments
+### Options
 
-- **--engine**: Choose the intelligence engines to use: `threatfox`, `otx`, `virustotal`, or `all`.
-- **--ip**: Specify an IP address to check (e.g., `4.4.4.4`).
-- **--host**: Specify a hostname to check (e.g., `www.example.com`).
-- **--url**: Specify a URL to check (e.g., `http://www.example.com`).
-- **--hash**: Specify a file hash to check (e.g., `7b42b35832855ab4ff37ae9b8fa9e571`).
-- **--file**: Path to a file to check.
-- **--hostfile**: File containing multiple hostnames, each on a new line.
-- **--IPfile**: File containing multiple IP addresses, each on a new line.
+- `--ip` : IP address (e.g., `4.4.4.4`).
+- `--host` : Hostname (e.g., `www.example.com`).
+- `--url` : Full URL (e.g., `http://www.example.com`).
+- `--hash` : Hash of the file to check (e.g., `7b42b35832855ab4ff37ae9b8fa9e571`).
+- `--file` : Path to a file to analyze its hash.
+- `--hostfile` : File with a list of hostnames.
+- `--IPfile` : File with a list of IP addresses.
+- `--engine` : Specify intelligence engines to use (`threatfox`, `otx`, `virustotal`, `all`).
 
 ### Examples
 
-#### Checking a single IP with VirusTotal
-```bash
-python3 malicious_checker.py --ip 8.8.8.8 --engine virustotal
-```
+- Check an IP across all platforms:
+  ```bash
+  python ThreatScanner.py --ip 8.8.8.8 --engine all
+  ```
 
-#### Checking a URL on all engines
-```bash
-python3 malicious_checker.py --url "http://example.com" --engine all
-```
-
-#### Checking a file with multiple hosts
-```bash
-python3 malicious_checker.py --hostfile hosts.txt --engine otx
-```
-
-## License
-
-This project is licensed under the MIT License.
-```
+- Analyze multiple domains in AlienVault OTX:
+  ```bash
+  python ThreatScanner.py --hostfile domains.txt --engine otx
+  ```

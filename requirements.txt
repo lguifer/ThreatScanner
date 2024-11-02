@@ -1,0 +1,7 @@
+requests
+urllib3
+argparse
+hashlib
+concurrent.futures
+pdb
+OTXv2
