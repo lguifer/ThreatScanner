@@ -8,13 +8,17 @@ import urllib3
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from OTXv2 import OTXv2
 import get_malicious
-import pdb
 import re
 import base64
+import logging
+from datetime import datetime
+import socket
+
+
 
 # API keys and endpoints
-API_VT_KEY = '<put-your-api-key>'  # VirusTotal API key
-API_AV_KEY = '<put-your-api-key>'  # AlienVault OTX API key
+API_VT_KEY = ''  # VirusTotal API key
+API_AV_KEY = ''  # AlienVault OTX API key
 VT_URL = 'https://www.virustotal.com/api/v3/'
 OTX_SERVER = 'https://otx.alienvault.com/'
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 Edg/123.0.0.0"
@@ -23,7 +27,7 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 otx = OTXv2(API_AV_KEY, server=OTX_SERVER, user_agent=USER_AGENT)
 
 # General variable for max workers
-max_workers = 100
+max_workers = 10
 
 # Argument configuration
 parser = argparse.ArgumentParser(description='Malicious Checker with VirusTotal, AlienVault OTX, and ThreatFox')
@@ -43,55 +47,85 @@ parser.add_argument(
 )
 args = vars(parser.parse_args())
 
+class CustomFormatter(logging.Formatter):
+    """Formato personalizado para incluir milisegundos en los registros."""
+    def formatTime(self, record, datefmt=None):
+        """Sobrescribe el formato de tiempo para agregar milisegundos."""
+        ct = datetime.fromtimestamp(record.created)
+        if datefmt:
+            s = ct.strftime(datefmt)
+        else:
+            s = ct.strftime("%Y-%m-%d %H:%M:%S")
+        return f"{s},{int(record.msecs):03d}"  # Agrega milisegundos manualmente
+
+# Configuración del logger
+def setup_logger():
+    """Configura el logger para escribir en /var/log/intel.log."""
+    logger = logging.getLogger("Intel")
+    logger.setLevel(logging.INFO)
+
+    hostname = socket.gethostname()  # Obtiene el nombre del host
+    formatter = CustomFormatter(
+        #f'%(asctime)s {hostname} Intel[1]: %(message)s',
+        #datefmt='%Y-%m-%d %H:%M:%S'
+        f'%(message)s',
+
+   )
+
+    file_handler = logging.FileHandler("/var/log/intel.log", mode='a')
+    file_handler.setFormatter(formatter)
+
+    logger.addHandler(file_handler)
+    return logger
+
+# Inicializar el logger
+threat_logger = setup_logger()
+
+# Función para escribir mensajes al log
+def write_to_file(engine, message):
+    """Escribe un mensaje en el log con un formato específico."""
+    log_message = f"{message}"
+    threat_logger.info(log_message)
+
 def vt_request(endpoint):
-    """Makes a request to the VirusTotal API."""
-    headers = {
-        "x-apikey": API_VT_KEY
-    }
+    headers = {"x-apikey": API_VT_KEY}
     response = requests.get(f"{VT_URL}{endpoint}", headers=headers)
     return response.json()
 
 def check_virustotal(item_type, item_value):
-    """Checks if an IP, hostname, URL, or hash is malicious."""
     try:
         response = None
         comments = None
-
         if item_type == "ip":
             response = vt_request(f"ip_addresses/{item_value}")
             comments = vt_request(f"ip_addresses/{item_value}/collections")
-        
         elif item_type == "host":
             response = vt_request(f"domains/{item_value}")
             comments = vt_request(f"domains/{item_value}/collections")
         elif item_type == "url":
-            # Convert the string to bytes
             filtered_url = re.sub(r'^(http://|https://|ftp://|ftps://|www\.)', '', item_value)
-            string_bytes = filtered_url.encode('utf-8')
-
-            # Encode to Base64
-            base64_bytes = base64.b64encode(string_bytes)
-
-            # Convert back to string
-            base64_string = base64_bytes.decode('utf-8')
+            base64_string = base64.b64encode(filtered_url.encode('utf-8')).decode('utf-8')
             response = vt_request(f"urls/{base64_string}")
             comments = vt_request(f"urls/{base64_string}/collections")
         elif item_type == "file":
             response = vt_request(f"files/{item_value}")
             comments = vt_request(f"files/{item_value}/collections")
-#        pdb.set_trace()
+
         if response and response.get('data'):
             alerts = response['data']['attributes']['last_analysis_stats']
             if alerts and (alerts['malicious'] != 0 or alerts['suspicious'] != 0):
-                description_text = "; ".join([f"Description: {collection['attributes']['name']}" for collection in comments["data"]])
-                print(f"VirusTotal: {item_type.capitalize()} detected: {item_value} -- Malicious: {alerts['malicious']} -- Suspicious: {alerts['suspicious']} -- {description_text}")
-                #print("\n---------------------------------------------------------")
-        
+                description_text = "; ".join(
+                    [f"Description: {collection['attributes']['name']}" for collection in comments["data"]]
+                )
+                message = (f"VirusTotal: {item_type.capitalize()} detected: {item_value} -- Malicious: "
+                           f"{alerts['malicious']} -- Suspicious: {alerts['suspicious']} -- {description_text}")
+                print(message)
+                write_to_file("virustotal", message)
+
     except Exception as e:
-        pass
+        print(f"Error in VirusTotal check: {e}")
 
 def check_av_otx(item_type, item_value):
-    """Check if an item is malicious on AlienVault OTX."""
     try:
         alerts = None
         if item_type == "ip":
@@ -102,37 +136,30 @@ def check_av_otx(item_type, item_value):
             alerts = get_malicious.url(otx, item_value)
         elif item_type == "hash":
             alerts = get_malicious.file(otx, item_value)
-#        pdb.set_trace()
+
         if alerts:
-            print(f'AlienVault OTX: {item_type.capitalize()} detected: {item_value} -- Alerts: {alerts}')
-            #print("\n---------------------------------------------------------")
+            message = f'AlienVault OTX: {item_type.capitalize()} detected: {item_value} -- Alerts: {alerts}'
+            print(message)
+            write_to_file("otx", message)
     except Exception as e:
-        print(e)
+        print(f"Error in AlienVault OTX check: {e}")
 
 def check_threatfox(item_type, search_term):
-    """Searches ThreatFox for indicators of compromise (IOC) using the given search term."""
     pool = urllib3.HTTPSConnectionPool('threatfox-api.abuse.ch', port=443, maxsize=50)
-    data = {
-        'query': 'search_ioc',
-        'search_term': search_term
-    }
+    data = {'query': 'search_ioc', 'search_term': search_term}
     json_data = json.dumps(data)
     response = pool.request("POST", "/api/v1/", body=json_data, headers={'Content-Type': 'application/json'})
-    
-    # Asegúrate de convertir la respuesta JSON a un diccionario
     response_data = json.loads(response.data.decode("utf-8", "ignore"))
-    
-    if response_data["query_status"] == "ok":  
-        for item in response_data.get("data", []):  # 'data' puede no existir
-            print(f"ThreatFox: {item_type.capitalize()} detected: {item['ioc']}, Malware: {item['malware']}, Confidence: {item['confidence_level']}%, "
-                  f"First Seen: {item['first_seen']}, Last Seen: {item['last_seen']}, Details: {item['malware_malpedia']}")
-            #print("\n---------------------------------------------------------")
-    else:
-        #print(f"No results found for {search_term}. Response: {response_data}")  # Manejo de errores si no hay resultados
-        pass
+
+    if response_data["query_status"] == "ok":
+        for item in response_data.get("data", []):
+            message = (f"ThreatFox: Search: {search_term} | {item_type.capitalize()} detected: {item['ioc']} | Malware: "
+                       f"{item['malware']} | Confidence: {item['confidence_level']}% | First Seen: {item['first_seen']} | "
+                       f"Last Seen: {item['last_seen']} | Details: {item['malware_malpedia']}")
+            print(message)
+            write_to_file("threatfox", message)
 
 def check_file(file_path):
-    """Check if a file is malicious based on its hash."""
     try:
         file_hash = hashlib.md5(open(file_path, 'rb').read()).hexdigest()
         check_virustotal("files", file_hash)
@@ -141,7 +168,6 @@ def check_file(file_path):
         print(f"Error checking file {file_path}: {e}")
 
 def process_file(file, item_type):
-    """Process a file with multiple entries (hosts or IPs)."""
     try:
         with open(file, 'r') as f:
             items = [item.strip() for item in f]
@@ -158,7 +184,6 @@ def process_file(file, item_type):
         print(f"Error processing {item_type} file {file}: {e}")
 
 def check_engines(item_type, item_value):
-    """Check the specified item with all selected engines."""
     for engine in args['engine']:
         if engine == 'virustotal':
             check_virustotal(item_type, item_value)
@@ -166,8 +191,11 @@ def check_engines(item_type, item_value):
             check_av_otx(item_type, item_value)
         elif engine == 'threatfox':
             check_threatfox(item_type, item_value)
+        elif engine == 'all':
+            check_virustotal(item_type, item_value)
+            check_av_otx(item_type, item_value)
+            check_threatfox(item_type, item_value)
 
-# Main script logic
 if args['ip']:
     check_engines("ip", args['ip'])
 
@@ -191,3 +219,7 @@ if args['IPfile']:
 
 if 'threatfox' in args['engine'] and args.get('search'):
     check_threatfox(args['search'])
+
+
+
+
