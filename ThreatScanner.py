@@ -41,7 +41,7 @@ def is_valid_public_domain(domain: str) -> bool:
 
 # --- Cargar configuración desde el fichero ---
 config = configparser.ConfigParser()
-config.read("scanner.conf")
+config.read("ThreatScanner.conf")
 
 API_VT_KEY   = config.get("DEFAULT", "API_VT_KEY", fallback="")
 API_AV_KEY   = config.get("DEFAULT", "API_AV_KEY", fallback="")
