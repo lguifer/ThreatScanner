@@ -1,62 +1,128 @@
-# ThreatScanner
+# ThreatScanner - FAQ
 
-**ThreatScanner** is a Python-based tool designed to quickly scan and analyze threat indicators (IPs, domains, URLs, files, and hashes) using multiple intelligence sources like **VirusTotal**, **AlienVault OTX**, and **ThreatFox**. This script helps identify potential threats and gather detailed information on them.
+Este documento responde a las preguntas frecuentes (FAQ) sobre el funcionamiento y uso de **ThreatScanner**, una herramienta de detección de IOCs basada en VirusTotal, AlienVault OTX y ThreatFox.
 
-## Features
+---
 
-- Query analysis of IPs, hostnames, URLs, files, and hashes.
-- Integration with VirusTotal, AlienVault OTX, and ThreatFox APIs.
-- Concurrent execution to enhance performance when analyzing multiple items.
-- Supports batch analysis from text files.
+### ¿Qué hace ThreatScanner?
 
-## Requirements
+ThreatScanner analiza IPs, dominios, URLs y hashes de archivos para detectar amenazas conocidas mediante consultas a:
 
-- Python 3.6+
-- Python libraries specified in `requirements.txt`
+- [VirusTotal](https://www.virustotal.com/)
+- [AlienVault OTX](https://otx.alienvault.com/)
+- [Abuse.ch ThreatFox](https://threatfox.abuse.ch/)
 
-## Installation
+También puede analizar listas de indicadores o entradas individuales por línea de comandos, sin necesidad de integración con NIDS.
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/ThreatScanner.git
-   cd ThreatScanner
-   ```
+---
 
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+### ¿Cómo se usa?
 
-3. Set up API keys in the code:
-   - Open the main script and replace `<put-your-api-key>` with your own **VirusTotal** and **AlienVault OTX** API keys.
-
-## Usage
-
-Run the script with the necessary arguments to specify the type of analysis and the intelligence engines.
+Ejemplos:
 
 ```bash
-python ThreatScanner.py [options]
+# Analizar una IP con todos los motores
+python3 threatscanner.py --ip 8.8.8.8 --engine all
+
+# Analizar dominios desde un archivo con VirusTotal y OTX
+python3 threatscanner.py --hostfile dominios.txt --engine virustotal otx
+
+# Ejecutar el análisis sin usar información contextual de Zeek
+python3 threatscanner.py --ip 1.1.1.1 --engine all --skip-ids
 ```
 
-### Options
+---
 
-- `--ip` : IP address (e.g., `4.4.4.4`).
-- `--host` : Hostname (e.g., `www.example.com`).
-- `--url` : Full URL (e.g., `http://www.example.com`).
-- `--hash` : Hash of the file to check (e.g., `7b42b35832855ab4ff37ae9b8fa9e571`).
-- `--file` : Path to a file to analyze its hash.
-- `--hostfile` : File with a list of hostnames.
-- `--IPfile` : File with a list of IP addresses.
-- `--engine` : Specify intelligence engines to use (`threatfox`, `otx`, `virustotal`, `all`).
+### ¿Qué configuración requiere?
 
-### Examples
+Debes crear un archivo `ThreatScanner.conf` con estas claves:
 
-- Check an IP across all platforms:
-  ```bash
-  python ThreatScanner.py --ip 8.8.8.8 --engine all
-  ```
+```ini
+[DEFAULT]
+API_VT_KEY = tu_api_key_virustotal
+API_AV_KEY = tu_api_key_otx
+API_TF_KEY = tu_api_key_threatfox
+VT_URL = https://www.virustotal.com/api/v3/
+OTX_SERVER = https://otx.alienvault.com/
+USER_AGENT = Mozilla/5.0 (...)
+max_workers = 10
+```
 
-- Analyze multiple domains in AlienVault OTX:
-  ```bash
-  python ThreatScanner.py --hostfile domains.txt --engine otx
-  ```
+---
+
+### ¿Qué hace el parámetro --skip-ids?
+
+Cuando se incluye `--skip-ids`, ThreatScanner desactiva la búsqueda de contexto en logs de Zeek (como IPs relacionadas o puertos), y consulta directamente los indicadores proporcionados. Es útil para entornos sin NIDS o análisis rápido.
+
+---
+
+### ¿Evita escaneos duplicados?
+
+Sí. ThreatScanner guarda los IOCs ya procesados en:
+
+- `processed_ips.txt`
+- `processed_hosts.txt`
+
+Usa `grep` para evitar repetir consultas.
+
+---
+
+### ¿Dónde se guarda el log?
+
+Por defecto en:
+
+```
+/var/log/intel.log
+```
+
+Formato configurable:
+
+- `--log-format json`
+- `--log-format syslog`
+
+---
+
+### ¿Puedo controlar qué motor usar?
+
+Sí, con el argumento `--engine`, puedes usar uno o varios:
+
+- `virustotal`
+- `otx`
+- `threatfox`
+- `all`
+
+---
+
+### ¿Puede analizar archivos?
+
+Sí. Puedes pasar un hash con `--hash` o un archivo con `--file` (se calcula su hash MD5 automáticamente).
+
+---
+
+### ¿Qué pasa si un motor no responde?
+
+El error se imprime en consola y en el log, pero no interrumpe el resto del análisis.
+
+---
+
+### ¿Detecta falsos positivos?
+
+No. ThreatScanner solo informa de coincidencias con fuentes OSINT. La interpretación final depende del analista.
+
+---
+
+### ¿Contribuciones?
+
+Puedes abrir issues o pull requests en GitHub. El código está modularizado para facilitar mejoras por comunidad.
+
+---
+
+### ¿Soporta TLS o APIs privadas?
+
+Sí. Las API keys se gestionan desde el archivo de configuración, y puedes adaptar el cliente a endpoints TLS si lo deseas.
+
+---
+
+### ¿Hay soporte para exportar los resultados?
+
+Actualmente los logs se guardan en `/var/log/intel.log`. Puedes usar `jq` o `awk` para procesarlos.
