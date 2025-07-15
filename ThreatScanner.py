@@ -41,7 +41,7 @@ def is_valid_public_domain(domain: str) -> bool:
 
 # --- Cargar configuración desde el fichero ---
 config = configparser.ConfigParser()
-config.read("ThreatScanner.conf")
+config.read("/root/ThreatScanner/ThreatScanner.conf")
 
 API_VT_KEY   = config.get("DEFAULT", "API_VT_KEY", fallback="")
 API_AV_KEY   = config.get("DEFAULT", "API_AV_KEY", fallback="")
@@ -220,26 +220,64 @@ def check_av_otx(item_type, item_value):
 
 def check_threatfox(item_type, search_term):
     global ip_src, ip_dst, port_src, port_dst
-    pool = urllib3.HTTPSConnectionPool('threatfox-api.abuse.ch', port=443, maxsize=50)
-    data = {'query': 'search_ioc', 'search_term': search_term}
-    json_data = json.dumps(data)
-    response = pool.request("POST", "/api/v1/", body=json_data, headers={'Content-Type': 'application/json'}, timeout=10)
-    response_data = json.loads(response.data.decode("utf-8", "ignore"))
-    if response_data["query_status"] == "ok":
-        for item in response_data.get("data", []):
-            candidate = item['ioc']
-            if item_type == "host":
-                search_ext = tldextract.extract(search_term)
-                candidate_ext = tldextract.extract(candidate)
-                effective_search = f"{search_ext.domain}.{search_ext.suffix}"
-                effective_candidate = f"{candidate_ext.domain}.{candidate_ext.suffix}"
-                if effective_search != effective_candidate:
-                    continue
-            message = (f"ThreatFox: Search: {search_term} | {item_type.capitalize()} detected: {candidate} | Malware: "
-                       f"{item['malware']} | Confidence: {item['confidence_level']}% | First Seen: {item['first_seen']} | "
-                       f"Last Seen: {item['last_seen']} | Details: \"{item['malware_malpedia']}\" | Context: ip_src: {ip_src} port_src: {port_src} ip_dest: {ip_dst} port_dest: {port_dst}")
-            print(message)
-            write_to_file("threatfox", message)
+    try:
+        API_TF_KEY = config.get("DEFAULT", "API_TF_KEY", fallback="")
+        if not API_TF_KEY:
+            print("Falta API_TF_KEY en ThreatScanner.conf para usar ThreatFox.")
+            return
+
+        pool = urllib3.HTTPSConnectionPool('threatfox-api.abuse.ch', port=443, maxsize=50)
+        
+        data = {'query': 'search_ioc', 'search_term': search_term}
+        json_data = json.dumps(data)
+        headers = {
+            'Content-Type': 'application/json',
+            'Auth-Key': API_TF_KEY
+        }
+        response = pool.request(
+            "POST",
+            "/api/v1/",
+            body=json_data,
+            headers=headers,
+            timeout=10
+        )
+
+        if response.status != 200:
+            print(f"ThreatFox: Error HTTP {response.status} al consultar {search_term}")
+            write_to_file("threatfox", f"Error HTTP {response.status} al consultar {search_term}")
+            return
+
+        try:
+            response_data = json.loads(response.data.decode("utf-8", "ignore"))
+        except json.JSONDecodeError as e:
+            print(f"Error decodificando JSON para {search_term}: {e}")
+            print("Respuesta recibida:", response.data.decode("utf-8", "ignore"))
+            write_to_file("threatfox", f"Error JSON para {search_term}: {e}")
+            return
+
+        if response_data.get("query_status") == "ok":
+            for item in response_data.get("data", []):
+                candidate = item['ioc']
+                if item_type == "host":
+                    search_ext = tldextract.extract(search_term)
+                    candidate_ext = tldextract.extract(candidate)
+                    effective_search = f"{search_ext.domain}.{search_ext.suffix}"
+                    effective_candidate = f"{candidate_ext.domain}.{candidate_ext.suffix}"
+                    if effective_search != effective_candidate:
+                        continue
+                message = (f"ThreatFox: Search: {search_term} | {item_type.capitalize()} detected: {candidate} | Malware: "
+                           f"{item['malware']} | Confidence: {item['confidence_level']}% | First Seen: {item['first_seen']} | "
+                           f"Last Seen: {item['last_seen']} | Details: \"{item['malware_malpedia']}\" | "
+                           f"Context: ip_src: {ip_src} port_src: {port_src} ip_dest: {ip_dst} port_dest: {port_dst}")
+                print(message)
+                write_to_file("threatfox", message)
+        #else:
+            #print(f"ThreatFox: búsqueda fallida para {search_term} -- Respuesta: {response_data}")
+            #write_to_file("threatfox", f"Búsqueda fallida para {search_term}")
+    except Exception as e:
+        print(f"Excepción en check_threatfox para {search_term}: {e}")
+        write_to_file("threatfox", f"Excepción en check_threatfox para {search_term}: {e}")
+    finally:
         ip_src = ""
         ip_dst = ""
         port_src = ""
@@ -281,8 +319,8 @@ def check_engines(item_type, item_value):
 
     # Para búsquedas por host, validar que el dominio es válido
     if item_type == "host" and not is_valid_public_domain(item_value):
-        write_to_file("scanner", f"Se omite {item_value}: dominio no válido para internet.")
-        print(f"Se omite {item_value}: dominio no válido para internet.")
+        #write_to_file("scanner", f"Se omite {item_value}: dominio no válido para internet.")
+        #print(f"Se omite {item_value}: dominio no válido para internet.")
         return
 
     if not args['skip_ids']:
@@ -387,14 +425,15 @@ else:
         check_engines("ip", args['ip'])
     if args.get('host'):
         check_engines("host", args['host'])
-    if args.get('url'):
-        check_engines("url", args['url'])
-    if args.get('hash'):
-        check_engines("files", args['hash'])
-    if args.get('file'):
-        check_file(args['file'])
+#    if args.get('url'):
+#        check_engines("url", args['url'])
+#    if args.get('hash'):
+#        check_engines("files", args['hash'])
+#    if args.get('file'):
+#        check_file(args['file'])
     if args.get('hostfile'):
         process_file(args['hostfile'], "host")
     if args.get('IPfile'):
         process_file(args['IPfile'], "ip")
+
 
